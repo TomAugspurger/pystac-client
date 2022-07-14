@@ -1,7 +1,6 @@
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, TypeVar, cast, Callable
 
 import pystac
-from traitlets import Callable
 
 from pystac_client.conformance import ConformanceClasses
 from pystac_client.exceptions import APIError
@@ -24,7 +23,7 @@ class CollectionClient(pystac.Collection):
     sign_function: Callable[[T], T]
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any], href: Optional[str] = None, root: Optional[pystac.Catalog] = None, migrate: bool = False, preserve_dict: bool = True, sign_function = sign_function) -> "CollectionClient":
+    def from_dict(cls, d: Dict[str, Any], href: Optional[str] = None, root: Optional[pystac.Catalog] = None, migrate: bool = False, preserve_dict: bool = True, sign_function = no_sign) -> "CollectionClient":
         result = super().from_dict(d, href, root, migrate, preserve_dict)
         result.sign_function = sign_function
         return result

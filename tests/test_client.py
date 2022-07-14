@@ -396,3 +396,27 @@ class TestAPISearch:
         search_link.media_type = MediaType.JSON
         api.add_link(search_link)
         api.search(limit=1, max_items=1, collections="naip")
+
+
+class MySign:
+    def __init__(self):
+        self.call_count = 0
+
+    def __call__(self, x):
+        self.call_count += 1
+        return x
+
+
+class TestSigning:
+    def test_constructor(self):
+        sign = MySign()
+        client = Client.open(
+            STAC_URLS["PLANETARY-COMPUTER"], sign_function=sign
+        )
+        assert client.sign_function is sign
+
+        collection = client.get_collection("cil-gdpcir-cc0")
+        assert collection.sign_function is sign
+
+        collection.get_item("cil-gdpcir-INM-INM-CM5-0-ssp585-r1i1p1f1-day")
+        assert sign.call_count == 1
