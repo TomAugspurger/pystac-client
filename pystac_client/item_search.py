@@ -7,7 +7,7 @@ from datetime import datetime as datetime_
 from datetime import timezone
 from functools import lru_cache
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
 
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import tzutc
@@ -113,6 +113,12 @@ def dict_merge(
 
     return dct
 
+T = TypeVar("T")
+
+
+def no_sign(x: T) -> T:
+    return x
+
 
 class ItemSearch:
     """Represents a deferred query to a STAC search endpoint as described in the
@@ -210,6 +216,11 @@ class ItemSearch:
         fields: A list of fields to include in the response. Note this may
             result in invalid STAC objects, as they may not have required fields.
             Use `items_as_dicts` to avoid object unmarshalling errors.
+        sign_function: callable
+            A callable that expects some pystac object (Item, Asset, ItemCollection,
+            etc.) and returns a "signed" version of it. This can be used to
+            modify the results in arbitrary ways, but is most often used to
+            generate authenticated HREFs.
     """
 
     def __init__(
@@ -231,6 +242,7 @@ class ItemSearch:
         filter_lang: Optional[FilterLangLike] = None,
         sortby: Optional[SortbyLike] = None,
         fields: Optional[FieldsLike] = None,
+        sign_function: Callable[[T], T] = no_sign,
     ):
         self.url = url
         self.client = client
@@ -250,6 +262,7 @@ class ItemSearch:
             raise Exception(f"Invalid limit of {limit}, must be between 1 and 10,000")
 
         self.method = method
+        self.sign_function = sign_function
 
         params = {
             "limit": limit,
@@ -615,9 +628,9 @@ class ItemSearch:
             for page in self._stac_io.get_pages(
                 self.url, self.method, self.get_parameters()
             ):
-                yield ItemCollection.from_dict(
+                yield self.sign_function(ItemCollection.from_dict(
                     page, preserve_dict=False, root=self.client
-                )
+                ))
 
     def get_items(self) -> Iterator[Item]:
         """DEPRECATED. Use :meth:`ItemSearch.items` instead.
@@ -644,7 +657,7 @@ class ItemSearch:
         nitems = 0
         for item_collection in self.item_collections():
             for item in item_collection:
-                yield item
+                yield item  # already sign in item_collections
                 nitems += 1
                 if self._max_items and nitems >= self._max_items:
                     return
@@ -664,7 +677,7 @@ class ItemSearch:
             self.url, self.method, self.get_parameters()
         ):
             for item in page.get("features", []):
-                yield item
+                yield self.sign_function(item)
                 nitems += 1
                 if self._max_items and nitems >= self._max_items:
                     return
@@ -691,8 +704,8 @@ class ItemSearch:
             for feature in page["features"]:
                 features.append(feature)
                 if self._max_items and len(features) >= self._max_items:
-                    return {"type": "FeatureCollection", "features": features}
-        return {"type": "FeatureCollection", "features": features}
+                    return self.sign_function({"type": "FeatureCollection", "features": features})
+        return self.sign_function({"type": "FeatureCollection", "features": features})
 
     @lru_cache(1)
     def get_all_items(self) -> ItemCollection:
@@ -709,6 +722,6 @@ class ItemSearch:
             DeprecationWarning,
         )
         feature_collection = self.get_all_items_as_dict()
-        return ItemCollection.from_dict(
+        return self.sign_function(ItemCollection.from_dict(
             feature_collection, preserve_dict=False, root=self.client
-        )
+        ))

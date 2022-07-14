@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, TypeVar
 
 import pystac
 import pystac.validation
@@ -14,6 +14,12 @@ from pystac_client.stac_api_io import StacApiIO
 
 if TYPE_CHECKING:
     from pystac.item import Item as Item_Type
+
+T = TypeVar("T")
+
+
+def no_sign(x: T) -> T:
+    return x
 
 
 class Client(pystac.Catalog):
@@ -30,6 +36,7 @@ class Client(pystac.Catalog):
     functionality on top of a normal STAC Catalog,
     such as searching items (e.g., /search endpoint).
     """
+    sign_function: Callable[[T], T]
 
     def __repr__(self) -> str:
         return "<Client id={}>".format(self.id)
@@ -41,6 +48,7 @@ class Client(pystac.Catalog):
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         ignore_conformance: bool = False,
+        sign_function: Callable[[T], T] = no_sign,
     ) -> "Client":
         """Opens a STAC Catalog or API
         This function will read the root catalog of a STAC Catalog or API
@@ -61,7 +69,7 @@ class Client(pystac.Catalog):
         Return:
             catalog : A :class:`Client` instance for this Catalog/API
         """
-        client: Client = cls.from_file(url, headers=headers, parameters=parameters)
+        client: Client = cls.from_file(url, headers=headers, parameters=parameters, sign_function=sign_function)
         search_link = client.get_search_link()
         # if there is a search link, but no conformsTo advertised, ignore
         # conformance entirely
@@ -87,6 +95,7 @@ class Client(pystac.Catalog):
         stac_io: Optional[StacApiIO] = None,
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        sign_function = None,
     ) -> "Client":
         """Open a STAC Catalog/API
 
@@ -101,6 +110,7 @@ class Client(pystac.Catalog):
         client._stac_io._conformance = client.extra_fields.get(  # type: ignore
             "conformsTo", []
         )
+        client.sign_function = sign_function
 
         return client
 
@@ -120,10 +130,11 @@ class Client(pystac.Catalog):
         root: Optional[pystac.Catalog] = None,
         migrate: bool = False,
         preserve_dict: bool = True,
+        sign_function = None,
     ) -> "Client":
         try:
             # this will return a Client because we have used a StacApiIO instance
-            return super().from_dict(  # type: ignore
+            result = super().from_dict(  # type: ignore
                 d=d, href=href, root=root, migrate=migrate, preserve_dict=preserve_dict
             )
         except pystac.STACTypeError:
@@ -131,6 +142,8 @@ class Client(pystac.Catalog):
                 f"Could not open Client (href={href}), "
                 f"expected type=Catalog, found type={d.get('type', None)}"
             )
+        result.sign_function = sign_function
+        return result
 
     @lru_cache()
     def get_collection(self, collection_id: str) -> Optional[Collection]:
@@ -145,7 +158,7 @@ class Client(pystac.Catalog):
         if self._supports_collections() and self._stac_io:
             url = f"{self.get_self_href()}/collections/{collection_id}"
             collection = CollectionClient.from_dict(
-                self._stac_io.read_json(url), root=self
+                self._stac_io.read_json(url), root=self, sign_function=self.sign_function,
             )
             return collection
         else:
@@ -254,6 +267,7 @@ class Client(pystac.Catalog):
             url=search_href,
             stac_io=self._stac_io,  # type: ignore
             client=self,
+            sign_function=self.sign_function,
             **kwargs,
         )
 

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Iterator, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, cast
 
 import pystac
 
@@ -12,6 +12,13 @@ if TYPE_CHECKING:
 
 
 class CollectionClient(pystac.Collection):
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any], href: Optional[str] = None, root: Optional[pystac.Catalog] = None, migrate: bool = False, preserve_dict: bool = True, sign_function = None) -> "CollectionClient":
+        result = super().from_dict(d, href, root, migrate, preserve_dict)
+        result.sign_function = sign_function
+        return result
+
     def __repr__(self) -> str:
         return "<CollectionClient id={}>".format(self.id)
 
