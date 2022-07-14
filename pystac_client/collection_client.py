@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, TypeVar, cast
 
 import pystac
+from traitlets import Callable
 
 from pystac_client.conformance import ConformanceClasses
 from pystac_client.exceptions import APIError
@@ -11,10 +12,19 @@ if TYPE_CHECKING:
     from pystac.item import Item as Item_Type
 
 
+T = TypeVar("T")
+
+
+def no_sign(x: T) -> T:
+    return x
+
+
+
 class CollectionClient(pystac.Collection):
+    sign_function: Callable[[T], T]
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any], href: Optional[str] = None, root: Optional[pystac.Catalog] = None, migrate: bool = False, preserve_dict: bool = True, sign_function = None) -> "CollectionClient":
+    def from_dict(cls, d: Dict[str, Any], href: Optional[str] = None, root: Optional[pystac.Catalog] = None, migrate: bool = False, preserve_dict: bool = True, sign_function = sign_function) -> "CollectionClient":
         result = super().from_dict(d, href, root, migrate, preserve_dict)
         result.sign_function = sign_function
         return result
@@ -77,13 +87,16 @@ class CollectionClient(pystac.Collection):
                     else:
                         raise err
                 assert isinstance(item, pystac.Item)
-                return item
             else:
-                return super().get_item(id, recursive=False)
+                item = super().get_item(id, recursive=False)
         else:
             for root, _, _ in self.walk():
                 item = cast(pystac.Item, root.get_item(id, recursive=False))
                 if item is not None:
                     assert isinstance(item, pystac.Item)
-                    return item
-            return None
+                    break
+
+        if item:
+            item = self.sign_function(item)
+
+        return item

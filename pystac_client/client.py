@@ -187,11 +187,6 @@ class Client(pystac.Catalog):
         else:
             yield from super().get_collections()
 
-    def get_item(self, id: str, recursive: bool = False) -> Optional["Item_Type"]:
-        item = super().get_item(id, recursive)
-        if item:
-            return self.sign_function(item)
-
     def get_items(self) -> Iterator["Item_Type"]:
         """Return all items of this catalog.
 
