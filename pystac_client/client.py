@@ -160,8 +160,9 @@ class Client(pystac.Catalog):
             collection = CollectionClient.from_dict(
                 self._stac_io.read_json(url), root=self, sign_function=self.sign_function,
             )
-            return collection
+            return self.sign_function(collection)
         else:
+            # TODO: sign
             for col in self.get_collections():
                 if col.id == collection_id:
                     return col
@@ -183,7 +184,7 @@ class Client(pystac.Catalog):
                 if "collections" not in page:
                     raise APIError("Invalid response from /collections")
                 for col in page["collections"]:
-                    yield CollectionClient.from_dict(col, root=self)
+                    yield CollectionClient.from_dict(col, root=self, sign_function=self.sign_function)
         else:
             yield from super().get_collections()
 
